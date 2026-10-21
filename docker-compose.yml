@@ -1,0 +1,21 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: stock-ledger-db
+    environment:
+      POSTGRES_USER: stock
+      POSTGRES_PASSWORD: stock
+      POSTGRES_DB: stock_ledger
+    ports:
+      - "127.0.0.1:55432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U stock -d stock_ledger"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - stock_ledger_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  stock_ledger_data:

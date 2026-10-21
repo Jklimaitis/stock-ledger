@@ -1,0 +1,39 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: stock
+          POSTGRES_PASSWORD: stock
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U stock"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: instalar dependencias
+        run: pip install -r requirements.txt
+
+      - name: suite
+        env:
+          STOCK_ADMIN_DSN: postgresql://stock:stock@127.0.0.1:55432/postgres
+        run: python -m pytest -v

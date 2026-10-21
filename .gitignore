@@ -1,0 +1,10 @@
+# ambiente local
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# dados e segredos
+.env
+pgdata/
+*.dump
