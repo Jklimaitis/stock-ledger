@@ -17,7 +17,7 @@ from datetime import timedelta
 
 import pytest
 
-from services.stock import ChaveIdempotenciaReusada, EstoqueInsuficiente, reserve
+from services.stock import ChaveIdempotenciaReusada, EstoqueInsuficiente, ProdutoInexistente, reserve
 
 
 def hash_do_corpo(corpo: str = "{}") -> str:
@@ -156,7 +156,6 @@ def test_chave_reusada_com_corpo_diferente_e_recusada(conn, produto):
         idempotency_key="chave-1",
         request_hash=hash_do_corpo(),
     )   
-
         # o retorno
     assert criada_na_chave1 is True, "primeira vez com esta chave tem que criar"
     assert primeira.status == "active"
@@ -177,3 +176,37 @@ def test_chave_reusada_com_corpo_diferente_e_recusada(conn, produto):
 
     total = conn.execute("SELECT count(*) FROM reservations").fetchone()[0]
     assert total == 1, "a chave recusada nao pode ter criado uma segunda reserva"
+
+
+def test_produto_sem_linha_de_saldo_e_inexistente(conn, vazio):
+    """Produto existe em products, mas nao tem linha em product_stock -> ProdutoInexistente."""
+
+    pid = conn.execute("INSERT INTO products (name, unit) VALUES (%s, %s) RETURNING id", ("produto-sem-saldo", "un")).fetchone()[0]
+
+    pedido = conn.execute("INSERT INTO orders DEFAULT VALUES RETURNING id").fetchone()[0]     # 2. criar o pedido, como nos outros testes
+
+    # 3. a chamada que deve falhar: quantidade 1, e NAO criar linha em product_stock
+    with pytest.raises(ProdutoInexistente) as excecao:
+        reserve(
+            conn,
+            order_id=pedido,
+            product_id=pid,
+            quantity=1,
+            ttl=timedelta(minutes=15),
+            idempotency_key="chave-sem-saldo",
+            request_hash=hash_do_corpo(),
+        )
+
+    # 4. o motivo: qual produto foi recusado
+    assert excecao.value.product_id == pid
+
+    # 5. o rastro: as mesmas tres contagens em zero
+    assert conn.execute(
+        '''SELECT count(*) FROM reservations'''
+    ).fetchone()[0] == 0   # reservations
+    assert conn.execute(
+        '''SELECT count(*) FROM stock_movements'''
+    ).fetchone()[0] == 0   # stock_movements
+    assert conn.execute(
+        '''SELECT count(*) FROM idempotency_keys'''
+    ).fetchone()[0] == 0   # idempotency_keys
